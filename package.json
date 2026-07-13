@@ -1,0 +1,40 @@
+{
+  "name": "nolan-young-local-agent-laboratory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "validate": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "clean": "tsx scripts/clean-generated-data.ts",
+    "check:ollama": "tsx scripts/check-ollama.ts",
+    "verify:workspaces": "tsx scripts/verify-workspaces.ts",
+    "code-editor": "npm run start -w @laboratory/code-editor --",
+    "build-assistant": "npm run start -w @laboratory/build-assistant --",
+    "release-engineer": "npm run start -w @laboratory/release-engineer --"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.19.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "^4.0.8"
+  }
+}

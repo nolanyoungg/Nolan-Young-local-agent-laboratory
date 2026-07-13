@@ -1,0 +1,5 @@
+{
+  "read": ["**"],
+  "write": ["src/**", "test/**", "tests/**", "package.json", "README.md"],
+  "forbidden": [".git/**", ".env*", "node_modules/**", "**/*.key", "**/*.pem"]
+}

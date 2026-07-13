@@ -1,0 +1,18 @@
+{
+  "commands": {
+    "build": {
+      "executable": "npm",
+      "arguments": ["run", "build"],
+      "timeoutMilliseconds": 120000,
+      "mode": "one-shot"
+    },
+    "test": {
+      "executable": "npm",
+      "arguments": ["test"],
+      "timeoutMilliseconds": 120000,
+      "mode": "one-shot"
+    }
+  },
+  "requiredFiles": ["package.json", "README.md"],
+  "forbiddenFiles": []
+}

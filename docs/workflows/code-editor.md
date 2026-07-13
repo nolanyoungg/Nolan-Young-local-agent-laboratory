@@ -1,0 +1,3 @@
+# Code Editor workflow
+
+The CLI validates configuration, canonicalizes the target, creates a local run directory, and acquires an exclusive mutation lock. The read-only planner inspects evidence and writes `change-plan.json`. `plan-only` then produces empty change evidence without invoking a mutator. `dry-run` and `apply` invoke the editor; the runtime forcibly sets mutation actions to dry-run in dry-run mode, regardless of model output. Mutations are atomic and report original/final SHA-256 values. A fresh read-only registry runs the reviewer against actual post-edit evidence. The workflow writes `proposed-changes.diff`, `changed-files.json`, `review-report.json`, final files, and releases the lock in `finally`.

@@ -1,0 +1,24 @@
+{
+  "commands": {
+    "build": {
+      "executable": "npm",
+      "arguments": ["run", "build"],
+      "timeoutMilliseconds": 120000,
+      "mode": "one-shot"
+    },
+    "dev": {
+      "executable": "npm",
+      "arguments": ["run", "dev"],
+      "startupTimeoutMilliseconds": 30000,
+      "mode": "watcher",
+      "readyPattern": "Watching for file changes",
+      "failurePattern": "Found 1 error"
+    },
+    "test": {
+      "executable": "npm",
+      "arguments": ["test"],
+      "timeoutMilliseconds": 120000,
+      "mode": "one-shot"
+    }
+  }
+}

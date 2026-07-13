@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/shared-types" },
+    { "path": "../../packages/workspace-security" },
+    { "path": "../../packages/local-model-client" },
+    { "path": "../../packages/tracing" },
+    { "path": "../../packages/filesystem-tools" },
+    { "path": "../../packages/agent-runtime" }
+  ]
+}

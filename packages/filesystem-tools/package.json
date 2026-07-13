@@ -1,0 +1,15 @@
+{
+  "name": "@laboratory/filesystem-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "default": "./src/index.ts"
+  },
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@laboratory/shared-types": "0.1.0",
+    "@laboratory/workspace-security": "0.1.0"
+  }
+}
