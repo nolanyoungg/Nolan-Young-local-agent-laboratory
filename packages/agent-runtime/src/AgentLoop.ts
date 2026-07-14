@@ -11,6 +11,7 @@ import { ContextBudget } from "./ContextBudget.js";
 import { ConversationState } from "./ConversationState.js";
 import { RetryPolicy } from "./RetryPolicy.js";
 import { StepLimiter } from "./StepLimiter.js";
+import { buildStructuredActionProtocol } from "./StructuredActionProtocol.js";
 import { StructuredResponseParser } from "./StructuredResponseParser.js";
 import { ToolPermissionGuard } from "./ToolPermissionGuard.js";
 import type { ToolRegistry } from "./ToolRegistry.js";
@@ -110,8 +111,18 @@ export class AgentLoop {
     task: string,
     config: ModelConfig,
   ): Promise<unknown> {
+    for (const tool of agent.permittedTools)
+      if (tool !== "finish" && !this.tools.has(tool))
+        throw new AgentRuntimeError(
+          "UNKNOWN_TOOL",
+          `Agent ${agent.id} permits unregistered tool: ${tool}`,
+        );
+    const protocol = buildStructuredActionProtocol(agent);
     const state = new ConversationState([
-      { role: "system", content: agent.systemInstructions },
+      {
+        role: "system",
+        content: `${agent.systemInstructions}\n\n${protocol.instructions}`,
+      },
       { role: "user", content: task },
     ]);
     const steps = new StepLimiter(agent.maximumSteps);
@@ -144,6 +155,10 @@ export class AgentLoop {
           const response = await this.model.complete({
             messages: state.messages(),
             config: { ...config, ...(agent.modelConfig ?? {}) },
+            // Ollama JSON mode prevents prose/fences. The stricter discriminated
+            // union remains in the system contract and is enforced by Zod here;
+            // some Ollama grammar backends reject complex oneOf schemas.
+            responseFormat: "json",
           });
           responseContent = response.content;
           await this.trace.record("model_response_received", {
@@ -151,6 +166,12 @@ export class AgentLoop {
             step,
             attempt,
             responseBytes: Buffer.byteLength(response.content),
+            responseSha256: contentDigest(response.content).sha256,
+            responseEnvelope: /^```/u.test(response.content.trim())
+              ? "markdown_fence"
+              : response.content.trim().startsWith("{")
+                ? "json_object"
+                : "other",
             model: response.model,
           });
           try {
@@ -171,7 +192,9 @@ export class AgentLoop {
                 content: JSON.stringify({
                   ok: false,
                   error: { code: error.code, message: error.message },
-                  instruction: "Return exactly one valid JSON action object.",
+                  instruction:
+                    "Correct the response using the exact JSON Schema in the system message. Return one raw JSON object only, with exact property names and no Markdown fence or commentary.",
+                  allowedActionTypes: protocol.actionTypes,
                 }),
               },
             );
@@ -244,7 +267,15 @@ export class AgentLoop {
           {
             role: "tool",
             name: action.type,
-            content: JSON.stringify(context.truncateToolResult(result)),
+            content: JSON.stringify({
+              ...context.truncateToolResult(result),
+              ...(result.ok
+                ? {}
+                : {
+                    runtimeInstruction:
+                      "This tool action did not take effect. Correct the next action using the error details, or finish honestly without claiming it succeeded.",
+                  }),
+            }),
           },
         );
       }

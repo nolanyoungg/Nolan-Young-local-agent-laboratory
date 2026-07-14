@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const releaseRepairSchema = z.object({
+export const releaseRepairSchema = z.strictObject({
   summary: z.string().min(1),
   changedFiles: z.array(z.string()),
   safeToRevalidate: z.boolean(),
@@ -23,8 +23,6 @@ export const createReleaseRepairAgent = (
     "create_file",
     "write_file",
     "apply_patch",
-    "read_process_log",
-    "get_process_status",
   ],
   maximumSteps,
   outputSchema: releaseRepairSchema,

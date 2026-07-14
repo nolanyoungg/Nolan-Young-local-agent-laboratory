@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   listFilesActionSchema,
@@ -17,6 +17,15 @@ export class ListFilesTool {
   async execute(input: unknown): Promise<ToolResult> {
     const action = listFilesActionSchema.parse(input);
     const root = await this.guard.resolve(action.path);
+    const rootStat = await lstat(root);
+    if (!rootStat.isDirectory())
+      return {
+        ok: false,
+        error: {
+          code: "NOT_A_DIRECTORY",
+          message: "list_files.path must reference a directory",
+        },
+      };
     const files: string[] = [];
     const walk = async (directory: string): Promise<void> => {
       for (const entry of (

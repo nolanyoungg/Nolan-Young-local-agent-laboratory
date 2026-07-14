@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const changePlanSchema = z.object({
+export const changePlanSchema = z.strictObject({
   summary: z.string().min(1),
   affectedFiles: z.array(z.string()),
   risks: z.array(z.string()),

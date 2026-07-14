@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const buildRepairSchema = z.object({
+export const buildRepairSchema = z.strictObject({
   summary: z.string().min(1),
   changedFiles: z.array(z.string()),
   safeToRetry: z.boolean(),

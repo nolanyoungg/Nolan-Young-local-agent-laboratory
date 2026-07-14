@@ -60,7 +60,20 @@ export class ReleaseRepairLoop {
         `Task: ${configuration.options.task}\nFailed checks: ${JSON.stringify(current)}`,
         configuration.model,
       )) as ReleaseReview;
-      if (!review.repairable) break;
+      if (!review.repairable) {
+        this.attempts.push({
+          pass,
+          review,
+          repair: null,
+          validation: current,
+        });
+        await this.trace.record("repair_pass_completed", {
+          pass,
+          success: false,
+          repairSkipped: true,
+        });
+        break;
+      }
       const repair = await new AgentRunner(
         this.model,
         this.registry(

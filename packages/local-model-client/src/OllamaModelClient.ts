@@ -48,6 +48,9 @@ export class OllamaModelClient implements LocalModelClient {
               role,
               content,
             })),
+            ...(request.responseFormat && request.responseFormat !== "text"
+              ? { format: request.responseFormat }
+              : {}),
             stream: false,
             options: {
               temperature: request.config.temperature,
@@ -62,6 +65,11 @@ export class OllamaModelClient implements LocalModelClient {
           throw new ModelClientError(
             "MODEL_NOT_INSTALLED",
             `Ollama does not have model ${request.config.model}. Run: ollama pull ${request.config.model}`,
+          );
+        if (response.status >= 400 && response.status < 500)
+          throw new ModelClientError(
+            "INVALID_REQUEST",
+            `Ollama rejected the model request with HTTP ${response.status}. Check model and structured-output compatibility.`,
           );
         throw new ModelClientError(
           "CONNECTION_FAILURE",

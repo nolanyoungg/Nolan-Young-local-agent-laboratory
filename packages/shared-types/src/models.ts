@@ -33,6 +33,13 @@ export type ModelConfig = z.infer<typeof modelConfigSchema>;
 export const modelRequestSchema = z.object({
   messages: z.array(agentMessageSchema).min(1),
   config: modelConfigSchema,
+  responseFormat: z
+    .union([
+      z.literal("text"),
+      z.literal("json"),
+      z.record(z.string(), z.unknown()),
+    ])
+    .optional(),
 });
 export type ModelRequest = z.infer<typeof modelRequestSchema>;
 

@@ -30,7 +30,7 @@ npm run check:ollama
 npm run validate
 ```
 
-No OpenAI account, hosted model, paid API, or API key is required. The real runtime defaults to Ollama at `http://127.0.0.1:11434`; it never silently falls back to an external provider. Tests and CI select the deterministic mock and do not require Ollama.
+No OpenAI account, hosted model, paid API, or API key is required. The real runtime defaults to Ollama at `http://127.0.0.1:11434`; it never silently falls back to an external provider. Agent requests use Ollama JSON mode plus a runtime-generated exact action contract. Strict local Zod validation, not the model or provider, decides whether an action is accepted. Tests and CI select the deterministic mock and do not require Ollama.
 
 ## Run the applications
 
@@ -81,7 +81,7 @@ Smaller local models may produce malformed structured output, choose the wrong t
 
 - Ollama unavailable: start Ollama and run `npm run check:ollama`.
 - Model missing: run `ollama pull qwen2.5-coder:14b`.
-- Malformed responses: narrow the task or increase the bounded retry setting.
+- Malformed responses: inspect `trace.jsonl` for the agent, attempt, response envelope/hash, and validation failure. The runtime supplies the exact schema and bounded correction feedback; repeated failures should be treated as a model/protocol compatibility issue rather than bypassing validation.
 - Context exhaustion: reduce scope or inspect fewer files.
 - Workspace locked: wait for the active mutating workflow or investigate a stale `.agent-laboratory.lock` only after confirming no workflow is running.
 - Command rejected: add a reviewed identifier to the target application's configuration; raw CLI/model command strings are intentionally unsupported.

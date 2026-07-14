@@ -4,6 +4,7 @@ export type ModelClientErrorCode =
   | "TIMEOUT"
   | "MALFORMED_OUTPUT"
   | "EMPTY_RESPONSE"
+  | "INVALID_REQUEST"
   | "CONNECTION_FAILURE"
   | "UNKNOWN_PROVIDER";
 export class ModelClientError extends Error {

@@ -5,6 +5,7 @@ export * from "./ConversationState.js";
 export * from "./errors.js";
 export * from "./RetryPolicy.js";
 export * from "./StepLimiter.js";
+export * from "./StructuredActionProtocol.js";
 export * from "./StructuredResponseParser.js";
 export * from "./ToolPermissionGuard.js";
 export * from "./ToolRegistry.js";

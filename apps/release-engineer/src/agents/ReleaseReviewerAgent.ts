@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const releaseReviewSchema = z.object({
+export const releaseReviewSchema = z.strictObject({
   summary: z.string().min(1),
   repairable: z.boolean(),
   risks: z.array(z.string()),

@@ -70,6 +70,49 @@ describe("local model clients", () => {
     ).rejects.toMatchObject({ code: "MALFORMED_OUTPUT" });
   });
 
+  it("forwards an explicit structured-output schema to Ollama", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          model: config.model,
+          done: true,
+          message: { content: '{"type":"finish","result":{}}' },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const format = {
+      type: "object",
+      properties: { type: { type: "string", const: "finish" } },
+      required: ["type"],
+      additionalProperties: false,
+    };
+    await new OllamaModelClient().complete({
+      ...request,
+      responseFormat: format,
+    });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init).toBeDefined();
+    expect(JSON.parse(String(init?.body))).toMatchObject({ format });
+  });
+
+  it("maps rejected structured-output requests without retrying", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('{"error":"bad grammar"}', { status: 400 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      new OllamaModelClient().complete({
+        ...request,
+        responseFormat: { oneOf: [] },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST", retryable: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a missing model through health checking", async () => {
     vi.stubGlobal(
       "fetch",

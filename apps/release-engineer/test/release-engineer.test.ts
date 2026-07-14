@@ -83,6 +83,36 @@ describe("ReleaseEngineerWorkflow", () => {
       ),
     ).toContain('"success": true');
   });
+  it("records a review that declines an unsafe repair", async () => {
+    const item = await fixture("check");
+    item.configuration.options.repair = true;
+    item.configuration.options.maxRepairPasses = 1;
+    item.configuration.commands.test = commandSchema.parse({
+      executable: process.execPath,
+      arguments: ["-e", "process.exit(2)"],
+      workingDirectory: item.configuration.options.workspace,
+    });
+    const review = {
+      summary: "The evidence does not support a safe source repair.",
+      repairable: false,
+      risks: ["The failing command produced no actionable diagnostic."],
+      repairStrategy: [],
+    };
+    const result = await new ReleaseEngineerWorkflow(
+      new MockModelClient([JSON.stringify({ type: "finish", result: review })]),
+      prompts,
+    ).run(item.configuration);
+    expect(result.success).toBe(false);
+    const attempts = JSON.parse(
+      await readFile(
+        path.join(result.reportDirectory, "repair-attempts.json"),
+        "utf8",
+      ),
+    ) as Array<{ review?: unknown; repair?: unknown }>;
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.review).toEqual(review);
+    expect(attempts[0]?.repair).toBeNull();
+  });
   it("inspects, extracts, validates, and checksums a package", async () => {
     const item = await fixture("package");
     const result = await new ReleaseEngineerWorkflow(

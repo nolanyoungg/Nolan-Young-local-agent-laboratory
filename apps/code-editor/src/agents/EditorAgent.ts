@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const editSummarySchema = z.object({
+export const editSummarySchema = z.strictObject({
   summary: z.string().min(1),
   changedFiles: z.array(z.string()),
   validationNotes: z.array(z.string()),

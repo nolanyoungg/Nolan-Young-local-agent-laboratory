@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { AgentDefinition } from "@laboratory/shared-types";
-export const buildReviewSchema = z.object({
+export const buildReviewSchema = z.strictObject({
   approved: z.boolean(),
   summary: z.string().min(1),
   findings: z.array(
-    z.object({
+    z.strictObject({
       severity: z.enum(["info", "warning", "error", "critical"]),
       message: z.string(),
       path: z.string().optional(),

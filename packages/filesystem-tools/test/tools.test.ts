@@ -18,6 +18,21 @@ describe("FilesystemTools", () => {
       (await tools.execute({ type: "search_text", path: ".", query: "hello" }))
         .output,
     ).toContain("a.txt:1");
+    expect(
+      (
+        await tools.execute({
+          type: "search_text",
+          path: "a.txt",
+          query: "hello",
+        })
+      ).output,
+    ).toBe("a.txt:1:hello");
+    const fileListing = await tools.execute({
+      type: "list_files",
+      path: "a.txt",
+    });
+    expect(fileListing.ok).toBe(false);
+    expect(fileListing.error?.code).toBe("NOT_A_DIRECTORY");
     await tools.execute({
       type: "write_file",
       path: "a.txt",
