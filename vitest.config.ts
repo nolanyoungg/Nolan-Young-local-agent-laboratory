@@ -22,10 +22,6 @@ export default defineConfig({
         "./packages/filesystem-tools/src/index.ts",
         import.meta.url,
       ).pathname,
-      "@laboratory/process-tools": new URL(
-        "./packages/process-tools/src/index.ts",
-        import.meta.url,
-      ).pathname,
       "@laboratory/agent-runtime": new URL(
         "./packages/agent-runtime/src/index.ts",
         import.meta.url,
@@ -33,11 +29,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: [
-      "packages/*/test/**/*.test.ts",
-      "apps/*/test/**/*.test.ts",
-      "scripts/test/**/*.test.ts",
-    ],
+    include: ["packages/*/test/**/*.test.ts", "scripts/test/**/*.test.ts"],
     testTimeout: 15000,
   },
 });

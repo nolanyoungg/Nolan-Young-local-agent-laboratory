@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "apps/*",
     "packages/*"
   ],
   "engines": {
@@ -22,11 +21,7 @@
     "agent": "tsx scripts/run-agent.ts",
     "agent:list": "tsx scripts/run-agent.ts --list",
     "clean": "tsx scripts/clean-generated-data.ts",
-    "check:ollama": "tsx scripts/check-ollama.ts",
-    "verify:workspaces": "tsx scripts/verify-workspaces.ts",
-    "code-editor": "npm run start -w @laboratory/code-editor --",
-    "build-assistant": "npm run start -w @laboratory/build-assistant --",
-    "release-engineer": "npm run start -w @laboratory/release-engineer --"
+    "check:ollama": "tsx scripts/check-ollama.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

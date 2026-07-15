@@ -1,3 +1,0 @@
-# Build Assistant workflow
-
-The application loads `.agent-commands.json`, validates command definitions, canonicalizes and locks the target, and starts only the selected identifier. One-shot mode records exit code and bounded stdout/stderr. On failure, a read-only diagnosis agent creates a repair plan, a policy-confined repair agent edits relevant source, and the same approved command is rerun for at most the configured repair passes. Watcher mode detects startup exit and keeps process ownership in TypeScript. A final read-only reviewer compares changes with failures. Watchers and remaining children stop in nested `finally` cleanup before the lock is released. Unresolved failure returns nonzero and preserves logs/workspace.

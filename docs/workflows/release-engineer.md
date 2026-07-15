@@ -1,3 +1,0 @@
-# Release Engineer workflow
-
-The application loads `.release-checks.json` and `.package-rules.json`, locks the target, and runs every configured command and file validator. Mandatory failures block packaging. With `--repair`, a read-only reviewer and policy-confined repair agent can perform bounded source repairs; policy files are forbidden and every check is rerun. Packaging includes only configured paths, excludes forbidden paths, enforces maximum size, inspects every ZIP entry for traversal before extraction, extracts to a temporary directory, validates required extracted files, removes the temporary directory, and writes SHA-256. It never publishes, tags, commits, or pushes.

@@ -192,5 +192,3 @@ That validates all agent/skill links, formatting, lint, TypeScript, unit/integra
 - Sensitive paths, `.git`, environment files, dependencies, keys, credentials, reports, and lock files are blocked by default.
 - Review agents receive no mutation tools and no process execution tool.
 - Model output is parsed as one strict action; prose pretending to be a tool call is rejected.
-
-The older `code-editor`, `build-assistant`, and `release-engineer` applications remain as experimental examples of the underlying engine. The supported personal-library entry point is `npm run agent`.
