@@ -6,6 +6,8 @@ dist/
 !.env.example
 reports/runs/*
 !reports/runs/.gitkeep
+reports/agent-runs/*
+!reports/agent-runs/.gitkeep
 workspaces/*
 !workspaces/.gitkeep
 *.log

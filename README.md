@@ -1,89 +1,196 @@
 # Nolan Young Local Agent Laboratory
 
-A local-first TypeScript platform for developing narrowly scoped AI-assisted engineering workflows. It is an npm-workspaces monorepo so security, model, process, file, trace, and agent-loop infrastructure can be reused without merging application responsibilities.
+A personal library of reusable AI agents and skills that run against local workspaces with models already installed in [Ollama](https://ollama.com).
 
-The repository contains exactly three applications:
+The user-facing idea is intentionally small:
 
-- `code-editor`: plan, dry-run/apply, and independently review bounded source changes.
-- `build-assistant`: own an approved build/watcher, diagnose failures, perform bounded repairs, rerun, and review.
-- `release-engineer`: run deterministic checks, optionally repair, package, inspect/extract, checksum, and report a local release candidate.
+```text
+agents/   role, scope, tools, and default skills
+skills/   reusable review methods and domain knowledge
+scripts/  one generic Ollama runner and library validator
+reports/  evidence produced by agent runs
+```
 
-Applications own workflows and policy. Agents are focused role configurations. Tools are deterministic TypeScript capabilities. The model is a local reasoning component. The model is never the authority: Zod parses actions, per-agent registration controls tools, canonical workspace policies control paths, application allowlists control processes, and deterministic exit codes/checks determine success.
+The TypeScript packages underneath provide the guarded file tools, structured agent loop, Ollama client, and traces. You do not need to understand or modify that engine to add an agent or skill.
+
+## Included agents
+
+### WordPress Speed Review Agent
+
+Location: [`agents/wordpress-speed-review-agent/AGENT.md`](agents/wordpress-speed-review-agent/AGENT.md)
+
+Performs a source-level WordPress theme performance review covering PHP work, queries, hooks, caching opportunities, scripts/styles, images, fonts, and build artifacts. It reports what the source proves and identifies runtime measurements that still need tools such as Query Monitor or Lighthouse.
+
+Default skills:
+
+- `wordpress-performance-audit`
+- `evidence-based-review`
+
+### GitHub Repository Review Agent
+
+Location: [`agents/github-repo-review/AGENT.md`](agents/github-repo-review/AGENT.md)
+
+Audits a repository's structure, core logic, error handling, configuration, scripts, tests, documentation accuracy, and hygiene. It compares README claims to the implementation and prioritizes evidence-backed findings.
+
+Default skills:
+
+- `repo-auditor`
+- `evidence-based-review`
+
+Both agents are read-only. They can list, read, inspect metadata, and search files inside the selected workspace. They cannot modify or delete files, use Git, run shell commands, install dependencies, or access paths outside the workspace.
+
+## Included skills
+
+| Skill                                                                        | Purpose                                                                |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`wordpress-performance-audit`](skills/wordpress-performance-audit/SKILL.md) | WordPress-specific performance workflow and checklist                  |
+| [`repo-auditor`](skills/repo-auditor/SKILL.md)                               | General repository architecture, logic, test, docs, and hygiene audit  |
+| [`evidence-based-review`](skills/evidence-based-review/SKILL.md)             | Shared method for defensible, prioritized findings without speculation |
+
+Skills follow the standard `SKILL.md` layout and include `agents/openai.yaml`, so they are also suitable for installation or reuse in Codex-compatible skill collections. The local runner loads the selected agent's default skills automatically, including bundled Markdown references.
 
 ## Requirements
 
-- Node.js 22 LTS (also recorded in `package.json` and `.nvmrc`)
+- Node.js 22 or newer
 - npm
-- [Ollama](https://ollama.com) for live model workflows
+- Ollama running locally
+- At least one model installed in Ollama
 
-Install the expected local model:
-
-```bash
-ollama pull qwen2.5-coder:14b
-```
-
-Install and validate the repository:
+Install dependencies and check Ollama:
 
 ```bash
 npm ci
 npm run check:ollama
+```
+
+List installed Ollama models with `ollama list`. If you do not pass `--model`, the runner selects the largest installed model. Pass `--model` when you want a specific one.
+
+## Run an agent
+
+List the available agents and skills:
+
+```bash
+npm run agent:list
+```
+
+Review a WordPress theme:
+
+```bash
+npm run agent -- \
+  --agent wordpress-speed-review-agent \
+  --workspace C:/path/to/wp-content/themes/my-theme \
+  --task "Review this entire theme for code and assets that may slow the site down."
+```
+
+Review a repository:
+
+```bash
+npm run agent -- \
+  --agent github-repo-review \
+  --workspace C:/path/to/repository \
+  --task "Audit this repository thoroughly. Prioritize real defects, weak tests, and README drift."
+```
+
+Choose a model or add another skill:
+
+```bash
+npm run agent -- \
+  --agent github-repo-review \
+  --workspace C:/path/to/repository \
+  --task "Perform a complete maintenance audit." \
+  --model qwen2.5-coder:14b \
+  --skill wordpress-performance-audit \
+  --max-steps 160
+```
+
+Windows PowerShell users can place the command on one line or use PowerShell's backtick continuation instead of `\`.
+
+Each run writes:
+
+```text
+reports/agent-runs/<timestamp>-<agent>-<run-id>/
+  report.md
+  result.json
+  run-metadata.json
+  trace.jsonl
+```
+
+The trace records model requests and tool activity without storing full file contents in trace metadata. The report contains findings, evidence, limitations, and recommended next steps.
+
+## How agents and skills work together
+
+An agent is the role and completion contract. A skill is reusable methodology loaded into that role.
+
+```text
+AGENT.md
+  + default SKILL.md files and references
+  + task supplied on the command line
+  + read-only workspace tools
+  + selected local Ollama model
+  = structured audit report
+```
+
+The model works iteratively: it requests one allowed file action, receives the bounded result, decides what to inspect next, and finally returns a strict result containing its scope, findings, limitations, and next steps. Agents have large but finite step budgets so they can handle tedious reviews without looping forever.
+
+## Add an agent
+
+Create `agents/<agent-slug>/AGENT.md`:
+
+```markdown
+---
+name: My Review Agent
+description: Explains what this agent reviews
+tools:
+  - list_files
+  - read_file
+  - read_file_metadata
+  - search_text
+skills:
+  - repo-auditor
+  - evidence-based-review
+maxSteps: 100
+minEvidenceFiles: 10
+requiredEvidence:
+  - functions.php
+  - templates/**
+---
+
+# Role
+
+Describe the role, review priorities, evidence rules, and completion criteria.
+```
+
+The current generic runner accepts only the four read-only tools. That is deliberate: these agents review other projects and should not silently change them.
+
+`minEvidenceFiles` is an enforceable completion gate. `requiredEvidence` optionally adds exact files or directory categories (`/**`). A model cannot successfully finish until it has directly read the required coverage and reports exact inspected paths. Every finding must also point to a successfully inspected file. If it tries to stop early, the runtime returns validation feedback and the same agent continues working within its step budget.
+
+## Add a skill
+
+Create `skills/<skill-slug>/SKILL.md` with exactly `name` and `description` in its YAML frontmatter. Put detailed optional material in `references/`. Keep the main skill concise and procedural.
+
+After adding or editing library content, run:
+
+```bash
+npm run validate:library
+npm test
+```
+
+## Validation
+
+Run the complete repository gate:
+
+```bash
 npm run validate
 ```
 
-No OpenAI account, hosted model, paid API, or API key is required. The real runtime defaults to Ollama at `http://127.0.0.1:11434`; it never silently falls back to an external provider. Agent requests use Ollama JSON mode plus a runtime-generated exact action contract. Strict local Zod validation, not the model or provider, decides whether an action is accepted. Tests and CI select the deterministic mock and do not require Ollama.
+That validates all agent/skill links, formatting, lint, TypeScript, unit/integration tests, and the build. Tests use deterministic mock model responses; they do not require Ollama.
 
-## Run the applications
+## Safety boundary
 
-```bash
-npm run code-editor -- --workspace ./examples/sample-node-project --task "Add robust numeric input validation" --mode plan-only
-npm run code-editor -- --workspace ./examples/sample-node-project --task "Add robust numeric input validation" --mode dry-run
-npm run code-editor -- --workspace ./examples/sample-node-project --task "Add robust numeric input validation" --mode apply
-```
+- Ollama URLs must use a loopback address such as `127.0.0.1` or `localhost`.
+- Workspace paths are canonicalized and cannot escape through traversal or symlinks.
+- Sensitive paths, `.git`, environment files, dependencies, keys, credentials, reports, and lock files are blocked by default.
+- Review agents receive no mutation tools and no process execution tool.
+- Model output is parsed as one strict action; prose pretending to be a tool call is rejected.
 
-```bash
-npm run build-assistant -- --workspace ./examples/broken-typescript-project --command build --task "Resolve all TypeScript compilation failures"
-npm run build-assistant -- --workspace ./examples/broken-typescript-project --command dev --watch --task "Repair compiler failures while the watcher runs"
-```
-
-```bash
-npm run release-engineer -- check --workspace ./examples/sample-release-project
-npm run release-engineer -- prepare --workspace ./examples/sample-release-project --repair
-npm run release-engineer -- package --workspace ./examples/sample-release-project
-npm run release-engineer -- release --workspace ./examples/sample-release-project --repair
-```
-
-Every CLI also supports `--help`, `--version`, `--model`, `--ollama-url`, `--max-steps`, `--report-directory`, and `--verbose`. Mutating workflows support dry-run and bounded repair controls where applicable. Relative workspaces resolve from the invoking user's current directory, not an npm workspace package directory.
-
-## Reports and traces
-
-Every run creates `reports/runs/<timestamp>-<application>-<run-id>/` containing `trace.jsonl`, `run-metadata.json`, `final-report.md`, `final-result.json`, and application-specific evidence. Trace events are ordered and locally written. Secret-like keys, authorization values, tokens, passwords, and private-key blocks are redacted; complete environment objects and secret file contents are not recorded.
-
-## Security model and external workspaces
-
-The model receives no general filesystem or shell access. All file actions pass through a canonical workspace guard that rejects traversal, outside absolute paths, null bytes, sensitive default paths, ignored paths, and symlink escapes. Reads and writes use separate glob policies. Writes are atomic and hashed. No recursive deletion tool exists.
-
-Processes are selected by application-owned identifiers and represented as executable plus argument array. `shell: false` is enforced. Output is bounded, watcher children are stopped in `finally`, and failure is determined from process state and exit codes.
-
-An explicitly supplied external absolute workspace is supported. Before using one:
-
-1. Keep it version controlled or backed up.
-2. Review its `.agent-commands.json`, `.release-checks.json`, and `.package-rules.json`.
-3. Start with plan-only or dry-run.
-4. Never target a home directory, credential store, SSH directory, or the agent platform repository when a separate project is intended.
-
-Approved project commands run with the current user's operating-system authority. This platform is defense in depth, not a hostile-code sandbox.
-
-## Local-model limitations
-
-Smaller local models may produce malformed structured output, choose the wrong tool, miss cross-file dependencies, repeat actions, overwrite too much code, or fail to resolve complex builds. The platform mitigates these risks with Zod schemas, bounded retries, step and repetition limits, explicit tool registration, context budgets, workspace isolation, atomic writes, dry-run modes, deterministic checks, independent reviewer agents, repair-pass limits, locks, and local traces. These controls reduce risk; they do not make model output infallible.
-
-## Troubleshooting
-
-- Ollama unavailable: start Ollama and run `npm run check:ollama`.
-- Model missing: run `ollama pull qwen2.5-coder:14b`.
-- Malformed responses: inspect `trace.jsonl` for the agent, attempt, response envelope/hash, and validation failure. The runtime supplies the exact schema and bounded correction feedback; repeated failures should be treated as a model/protocol compatibility issue rather than bypassing validation.
-- Context exhaustion: reduce scope or inspect fewer files.
-- Workspace locked: wait for the active mutating workflow or investigate a stale `.agent-laboratory.lock` only after confirming no workflow is running.
-- Command rejected: add a reviewed identifier to the target application's configuration; raw CLI/model command strings are intentionally unsupported.
-
-See [architecture](docs/architecture.md), [security model](docs/security-model.md), [configuration](docs/configuration.md), and the [workflow guides](docs/workflows/).
+The older `code-editor`, `build-assistant`, and `release-engineer` applications remain as experimental examples of the underlying engine. The supported personal-library entry point is `npm run agent`.
