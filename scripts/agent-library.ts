@@ -27,6 +27,8 @@ const agentMetadataSchema = z.object({
   tools: z.array(readToolSchema).min(1),
   skills: z.array(slugSchema).min(1),
   maxSteps: z.coerce.number().int().min(1).max(500).default(80),
+  minEvidenceFiles: z.coerce.number().int().min(1).max(100).default(5),
+  requiredEvidence: z.array(z.string().min(1)).default([]),
 });
 
 const skillMetadataSchema = z.object({
@@ -34,19 +36,19 @@ const skillMetadataSchema = z.object({
   description: z.string().min(1),
 });
 
+const auditFindingSchema = z.strictObject({
+  severity: z.enum(["high", "medium", "low", "info"]),
+  title: z.string().min(1),
+  evidence: z.array(z.string().min(1)).min(1),
+  impact: z.string().min(1),
+  recommendation: z.string().min(1),
+  path: z.string().min(1),
+});
+
 export const auditResultSchema = z.strictObject({
   summary: z.string().min(1),
   scopeReviewed: z.array(z.string()),
-  findings: z.array(
-    z.strictObject({
-      severity: z.enum(["high", "medium", "low", "info"]),
-      title: z.string().min(1),
-      evidence: z.array(z.string().min(1)).min(1),
-      impact: z.string().min(1),
-      recommendation: z.string().min(1),
-      path: z.string().min(1).optional(),
-    }),
-  ),
+  findings: z.array(auditFindingSchema),
   limitations: z.array(z.string()),
   recommendedNextSteps: z.array(z.string()),
 });
@@ -71,6 +73,8 @@ export interface LoadedAgent {
   readonly tools: readonly z.infer<typeof readToolSchema>[];
   readonly skillIds: readonly string[];
   readonly maximumSteps: number;
+  readonly minimumEvidenceFiles: number;
+  readonly requiredEvidence: readonly string[];
   readonly instructions: string;
 }
 
@@ -93,6 +97,9 @@ export interface LibraryAgentRunResult {
   readonly result: AuditResult;
   readonly reportDirectory: string;
 }
+
+const binaryFileExtension =
+  /\.(?:avif|bmp|eot|gif|ico|jpe?g|otf|png|ttf|webp|woff2?)$/iu;
 
 const parseMarkdown = (contents: string, source: string): ParsedMarkdown => {
   const normalized = contents.replaceAll("\r\n", "\n");
@@ -181,6 +188,8 @@ export const loadAgent = async (
     tools: metadata.tools,
     skillIds: metadata.skills,
     maximumSteps: metadata.maxSteps,
+    minimumEvidenceFiles: metadata.minEvidenceFiles,
+    requiredEvidence: metadata.requiredEvidence,
     instructions: parsed.body,
   };
 };
@@ -299,9 +308,64 @@ export const runLibraryAgent = async (
   });
   const registry = new ToolRegistry();
   const factory = new FilesystemToolFactory(guard);
+  const inspectedFiles = new Set<string>();
+  const normalizeEvidencePath = (value: string): string =>
+    value.replaceAll("\\", "/").replace(/^\.\//u, "").toLowerCase();
+  const satisfiesEvidenceRequirement = (requirement: string): boolean => {
+    const normalized = normalizeEvidencePath(requirement);
+    if (normalized.endsWith("/**")) {
+      const prefix = normalized.slice(0, -2);
+      return [...inspectedFiles].some((file) =>
+        normalizeEvidencePath(file).startsWith(prefix),
+      );
+    }
+    return [...inspectedFiles].some(
+      (file) => normalizeEvidencePath(file) === normalized,
+    );
+  };
+  let searchesBeforeMinimumCoverage = 0;
   for (const name of agent.tools)
     registry.register(name, {
-      execute: async (action) => factory.create(name).execute(action),
+      execute: async (action) => {
+        if (
+          action.type === "read_file" &&
+          binaryFileExtension.test(action.path)
+        )
+          return {
+            ok: false,
+            error: {
+              code: "BINARY_METADATA_REQUIRED",
+              message: `Use read_file_metadata for binary asset ${action.path}; binary contents are not useful source evidence and can exhaust the model context.`,
+            },
+          };
+        if (
+          action.type === "search_text" &&
+          inspectedFiles.size < agent.minimumEvidenceFiles
+        ) {
+          if (searchesBeforeMinimumCoverage >= 3)
+            return {
+              ok: false,
+              error: {
+                code: "EVIDENCE_COVERAGE_REQUIRED",
+                message: `Search limit reached before minimum coverage. Use read_file or read_file_metadata on ${agent.minimumEvidenceFiles - inspectedFiles.size} more distinct listed files before searching again.`,
+              },
+            };
+          searchesBeforeMinimumCoverage += 1;
+        }
+        const result = await factory.create(name).execute(action);
+        if (
+          result.ok &&
+          (action.type === "read_file" || action.type === "read_file_metadata")
+        )
+          inspectedFiles.add(action.path);
+        if (action.type === "search_text" && result.ok && result.output === "")
+          return {
+            ...result,
+            output:
+              "No matches. Do not repeat this search. Read representative paths from the file listing directly; searches do not satisfy the minimum evidence-file gate.",
+          };
+        return result;
+      },
     });
   const runId = randomUUID();
   const timestamp = new Date()
@@ -321,11 +385,54 @@ export const runLibraryAgent = async (
   await trace.initialize();
   const systemInstructions = [
     agent.instructions,
-    "Use the available repository tools methodically. Ground every finding in observed evidence. Do not claim to have executed software, measured runtime performance, or inspected files you did not actually inspect.",
+    `Use the available repository tools methodically. You must directly inspect at least ${agent.minimumEvidenceFiles} distinct files with read_file or read_file_metadata before finishing. Search results do not count toward this minimum.${agent.requiredEvidence.length > 0 ? ` Required evidence categories are: ${agent.requiredEvidence.join(", ")}. A path ending in /** means at least one file beneath that directory; use read_file_metadata for binary assets. Cover one representative file in each directory category first. Do not exhaustively read sibling files merely because they were listed. After the minimum and every required category are covered, perform only evidence-driven follow-up reads and then finish.` : ""} After listing the workspace, prioritize direct reads across representative root files and subdirectories; do not spend the review issuing broad searches without opening files. scopeReviewed must contain exact paths successfully inspected with read_file or read_file_metadata. Every finding must identify one of those inspected paths. Ground every finding in observed evidence and try to disprove it before reporting it. Do not claim to have executed software, measured runtime performance, or inspected files you did not actually inspect.`,
     ...skills.map(
       (skill) => `# Loaded skill: ${skill.name}\n\n${skill.instructions}`,
     ),
   ].join("\n\n");
+  const runResultSchema = auditResultSchema
+    .extend({
+      scopeReviewed: z
+        .array(z.string())
+        .min(
+          agent.minimumEvidenceFiles,
+          `Report at least ${agent.minimumEvidenceFiles} inspected files in scopeReviewed`,
+        ),
+    })
+    .superRefine((result, context) => {
+      if (inspectedFiles.size < agent.minimumEvidenceFiles)
+        context.addIssue({
+          code: "custom",
+          path: ["scopeReviewed"],
+          message: `Inspect at least ${agent.minimumEvidenceFiles} distinct files before finishing; ${inspectedFiles.size} inspected so far`,
+        });
+      const inspected = new Set(
+        [...inspectedFiles].map((file) => normalizeEvidencePath(file)),
+      );
+      for (const requirement of agent.requiredEvidence)
+        if (!satisfiesEvidenceRequirement(requirement))
+          context.addIssue({
+            code: "custom",
+            path: ["scopeReviewed"],
+            message: `Missing required direct evidence: ${requirement}`,
+          });
+      result.scopeReviewed.forEach((file, index) => {
+        if (!inspected.has(normalizeEvidencePath(file)))
+          context.addIssue({
+            code: "custom",
+            path: ["scopeReviewed", index],
+            message: `scopeReviewed must contain only successfully inspected file paths: ${file}`,
+          });
+      });
+      result.findings.forEach((finding, index) => {
+        if (!inspected.has(normalizeEvidencePath(finding.path)))
+          context.addIssue({
+            code: "custom",
+            path: ["findings", index, "path"],
+            message: `Finding path was not successfully inspected: ${finding.path}`,
+          });
+      });
+    });
   const definition: AgentDefinition = {
     id: agent.id,
     name: agent.name,
@@ -333,9 +440,9 @@ export const runLibraryAgent = async (
     systemInstructions,
     permittedTools: agent.tools,
     maximumSteps: options.maximumSteps ?? agent.maximumSteps,
-    outputSchema: auditResultSchema,
+    outputSchema: runResultSchema,
   };
-  const result = auditResultSchema.parse(
+  const result = runResultSchema.parse(
     await new AgentRunner(modelClient, registry, trace).run(
       definition,
       options.task,

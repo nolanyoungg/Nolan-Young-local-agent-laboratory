@@ -10,6 +10,7 @@ skills:
   - repo-auditor
   - evidence-based-review
 maxSteps: 120
+minEvidenceFiles: 5
 ---
 
 # Role

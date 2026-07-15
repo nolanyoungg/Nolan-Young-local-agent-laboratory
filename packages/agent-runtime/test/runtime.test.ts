@@ -187,6 +187,39 @@ describe("AgentRunner", () => {
     ).resolves.toEqual({ ok: true });
     expect(calls).toBe(2);
   });
+  it("returns thrown tool errors to the model for recovery", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "runtime-"));
+    const registry = new ToolRegistry();
+    registry.register("read_file", {
+      async execute(action): Promise<ToolResult> {
+        if (action.type === "read_file" && action.path === "missing.txt") {
+          const error = new Error("File does not exist") as Error & {
+            code: string;
+          };
+          error.code = "ENOENT";
+          throw error;
+        }
+        return { ok: true, output: "recovered" };
+      },
+    });
+    const model = new MockModelClient([
+      JSON.stringify({ type: "read_file", path: "missing.txt" }),
+      (request) => {
+        const toolResult = request.messages.at(-1)?.content;
+        expect(toolResult).toContain("ENOENT");
+        expect(toolResult).toContain("did not take effect");
+        return JSON.stringify({ type: "read_file", path: "present.txt" });
+      },
+      JSON.stringify({ type: "finish", result: { ok: true } }),
+    ]);
+    await expect(
+      new AgentRunner(
+        model,
+        registry,
+        new TraceRecorder("run", path.join(root, "trace.jsonl")),
+      ).run(agent, "task", modelConfigSchema.parse({})),
+    ).resolves.toEqual({ ok: true });
+  });
   it("detects repetition and maximum steps", async () => {
     const repeated = JSON.stringify({ type: "read_file", path: "a" });
     await expect(

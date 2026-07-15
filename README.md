@@ -149,6 +149,10 @@ skills:
   - repo-auditor
   - evidence-based-review
 maxSteps: 100
+minEvidenceFiles: 10
+requiredEvidence:
+  - functions.php
+  - templates/**
 ---
 
 # Role
@@ -157,6 +161,8 @@ Describe the role, review priorities, evidence rules, and completion criteria.
 ```
 
 The current generic runner accepts only the four read-only tools. That is deliberate: these agents review other projects and should not silently change them.
+
+`minEvidenceFiles` is an enforceable completion gate. `requiredEvidence` optionally adds exact files or directory categories (`/**`). A model cannot successfully finish until it has directly read the required coverage and reports exact inspected paths. Every finding must also point to a successfully inspected file. If it tries to stop early, the runtime returns validation feedback and the same agent continues working within its step budget.
 
 ## Add a skill
 

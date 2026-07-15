@@ -98,6 +98,40 @@ const summarizeResult = (result: ToolResult): Record<string, unknown> => {
   }
   return summary;
 };
+
+const validationIssues = (
+  error: unknown,
+): readonly { readonly path: unknown; readonly message: unknown }[] | null => {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("issues" in error) ||
+    !Array.isArray(error.issues)
+  )
+    return null;
+  return error.issues.flatMap((issue) =>
+    typeof issue === "object" &&
+    issue !== null &&
+    "path" in issue &&
+    "message" in issue
+      ? [{ path: issue.path, message: issue.message }]
+      : [],
+  );
+};
+
+const thrownToolResult = (error: unknown): ToolResult => ({
+  ok: false,
+  error: {
+    code:
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : "TOOL_EXECUTION_ERROR",
+    message: error instanceof Error ? error.message : String(error),
+  },
+});
 export class AgentLoop {
   private readonly parser = new StructuredResponseParser();
   private readonly permissions = new ToolPermissionGuard();
@@ -131,7 +165,8 @@ export class AgentLoop {
       config.retryCount,
       config.retryDelayMilliseconds,
     );
-    const repeated = new Map<string, number>();
+    let previousSignature: string | undefined;
+    let consecutiveRepeats = 0;
     await this.trace.record("agent_started", {
       agentId: agent.id,
       permittedTools: agent.permittedTools,
@@ -207,9 +242,40 @@ export class AgentLoop {
             "No validated action was produced",
           );
         if (action.type === "finish") {
-          const result = agent.outputSchema
-            ? agent.outputSchema.parse(action.result)
-            : action.result;
+          let result: unknown;
+          try {
+            result = agent.outputSchema
+              ? agent.outputSchema.parse(action.result)
+              : action.result;
+          } catch (error) {
+            const issues = validationIssues(error);
+            if (!issues) throw error;
+            await this.trace.record("tool_rejected", {
+              agentId: agent.id,
+              tool: "finish",
+              reason: "Final result did not satisfy its schema",
+              issues,
+            });
+            state.append(
+              { role: "assistant", content: responseContent },
+              {
+                role: "tool",
+                name: "validation_error",
+                content: JSON.stringify({
+                  ok: false,
+                  error: {
+                    code: "INVALID_FINAL_RESULT",
+                    message:
+                      "The final result did not satisfy the required schema or completion evidence gate.",
+                    issues,
+                  },
+                  instruction:
+                    "Continue gathering evidence when required, then return a corrected finish action that satisfies every issue.",
+                }),
+              },
+            );
+            continue;
+          }
           await this.trace.record("agent_completed", {
             agentId: agent.id,
             step,
@@ -227,12 +293,13 @@ export class AgentLoop {
           throw error;
         }
         const signature = JSON.stringify(action);
-        const count = (repeated.get(signature) ?? 0) + 1;
-        repeated.set(signature, count);
-        if (count > 2)
+        consecutiveRepeats =
+          signature === previousSignature ? consecutiveRepeats + 1 : 1;
+        previousSignature = signature;
+        if (consecutiveRepeats > 2)
           throw new AgentRuntimeError(
             "REPEATED_TOOL_CALL",
-            `Repeated identical tool call detected: ${action.type}`,
+            `Repeated identical consecutive tool call detected: ${action.type}`,
           );
         await this.trace.record("tool_requested", {
           agentId: agent.id,
@@ -260,7 +327,7 @@ export class AgentLoop {
             tool: action.type,
             message: error instanceof Error ? error.message : String(error),
           });
-          throw error;
+          result = thrownToolResult(error);
         }
         state.append(
           { role: "assistant", content: responseContent },
