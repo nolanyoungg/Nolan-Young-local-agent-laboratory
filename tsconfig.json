@@ -6,10 +6,6 @@
     { "path": "packages/local-model-client" },
     { "path": "packages/tracing" },
     { "path": "packages/filesystem-tools" },
-    { "path": "packages/process-tools" },
-    { "path": "packages/agent-runtime" },
-    { "path": "apps/code-editor" },
-    { "path": "apps/build-assistant" },
-    { "path": "apps/release-engineer" }
+    { "path": "packages/agent-runtime" }
   ]
 }
