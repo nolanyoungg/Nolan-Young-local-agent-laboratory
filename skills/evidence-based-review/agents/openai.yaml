@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evidence-Based Review"
+  short_description: "Produce prioritized, source-backed findings"
+  default_prompt: "Use $evidence-based-review to produce a prioritized review grounded in repository evidence."

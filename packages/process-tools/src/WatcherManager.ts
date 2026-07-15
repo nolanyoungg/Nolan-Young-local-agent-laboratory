@@ -18,6 +18,7 @@ export interface WatcherHandle {
 }
 export class WatcherManager {
   private readonly children = new Map<string, ChildProcessWithoutNullStreams>();
+  private readonly intentionalStops = new Set<string>();
   constructor(
     private readonly logs: ProcessLogStore,
     private readonly statuses: ProcessStatusStore,
@@ -56,11 +57,15 @@ export class WatcherManager {
       const current = this.statuses.get(id) ?? initial;
       this.statuses.set({
         ...current,
-        state: exitCode === 0 ? "stopped" : "failed",
+        state:
+          this.intentionalStops.has(id) || exitCode === 0
+            ? "stopped"
+            : "failed",
         stoppedAt: new Date().toISOString(),
         exitCode,
         signal,
       });
+      this.intentionalStops.delete(id);
       this.children.delete(id);
     });
     const getStatus = (): ProcessStatus => {
@@ -101,6 +106,7 @@ export class WatcherManager {
         return status;
       },
       stop: async () => {
+        this.intentionalStops.add(id);
         await terminateProcess(child);
         this.children.delete(id);
         const status = getStatus();
@@ -116,6 +122,7 @@ export class WatcherManager {
     };
   }
   async stopAll(): Promise<void> {
+    for (const id of this.children.keys()) this.intentionalStops.add(id);
     await Promise.all(
       [...this.children.values()].map((child) => terminateProcess(child)),
     );

@@ -1,0 +1,4 @@
+interface:
+  display_name: "WordPress Performance Audit"
+  short_description: "Audit WordPress themes for speed problems"
+  default_prompt: "Use $wordpress-performance-audit to inspect this WordPress theme for performance bottlenecks."

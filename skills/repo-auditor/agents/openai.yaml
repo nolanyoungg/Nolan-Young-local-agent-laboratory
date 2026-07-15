@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repository Auditor"
+  short_description: "Audit repository code, structure, and docs"
+  default_prompt: "Use $repo-auditor to perform an evidence-based audit of this repository."
