@@ -18,12 +18,13 @@ interface Arguments {
   approve: boolean;
   send: boolean;
   confirm?: string;
+  wordCount?: number;
   skills: string[];
   list: boolean;
   help: boolean;
 }
 
-const help = `Local Agent Library\n\nUsage:\n  npm run agent:list\n  npm run agent -- AGENT --target PATH [--task TEXT] [options]\n\nWordPress Blog Writer:\n  npm run agent -- wordpress-blog-writer-agent --target content.xlsx\n  npm run agent -- wordpress-blog-writer-agent --target content.xlsx --approve --send --confirm BLOG-ID --recipient nolanyoung7@yahoo.com\n  The first command creates a non-mutating draft preview.\n\nOptions:\n  --model NAME              Default: OLLAMA_MODEL or qwen2.5-coder:14b\n  --ollama-url URL          Default: OLLAMA_BASE_URL or http://127.0.0.1:11434\n  --task TEXT               Optional review request\n  --max-steps N             Override the agent step budget\n  --output-directory PATH   Draft output directory (blog writer)\n  --recipient EMAIL         Email recipient (blog writer)\n  --approve                 Allow the selected tracker row to be completed\n  --send                    Send the generated blog via the configured provider\n  --confirm BLOG-ID         Required exact Blog ID when sending\n  --help`;
+const help = `Local Agent Library\n\nUsage:\n  npm run agent:list\n  npm run agent -- AGENT --target PATH [--task TEXT] [options]\n\nWordPress Blog Writer:\n  npm run agent -- wordpress-blog-writer-agent --target content.xlsx\n  npm run agent -- wordpress-blog-writer-agent --target content.xlsx --approve --word-count 1200\n  npm run agent -- wordpress-blog-writer-agent --target content.xlsx --approve --send --confirm BLOG-ID --recipient nolanyoung7@yahoo.com\n  The first command creates a non-mutating draft preview.\n\nOptions:\n  --model NAME              Default: OLLAMA_MODEL or qwen2.5-coder:14b\n  --ollama-url URL          Default: OLLAMA_BASE_URL or http://127.0.0.1:11434\n  --task TEXT               Optional review request\n  --max-steps N             Override the agent step budget\n  --output-directory PATH   Draft output directory (blog writer)\n  --recipient EMAIL         Email recipient (blog writer)\n  --word-count N            Approximate requested blog length; default: 1200\n  --approve                 Allow the selected tracker row to be completed\n  --send                    Send the generated blog via the configured provider\n  --confirm BLOG-ID         Required exact Blog ID when sending\n  --help`;
 
 const parseArguments = (values: readonly string[]): Arguments => {
   const parsed: Arguments = {
@@ -58,6 +59,7 @@ const parseArguments = (values: readonly string[]): Arguments => {
       else if (key === "--output-directory") parsed.outputDirectory = value;
       else if (key === "--recipient") parsed.recipient = value;
       else if (key === "--confirm") parsed.confirm = value;
+      else if (key === "--word-count") parsed.wordCount = Number(value);
       else if (key === "--skill") parsed.skills.push(value);
       else throw new Error(`Unknown option: ${key}`);
     }
@@ -101,6 +103,9 @@ export const runAgentCli = async (
           args.ollamaUrl ??
           process.env.OLLAMA_BASE_URL ??
           "http://127.0.0.1:11434",
+        ...(args.wordCount !== undefined
+          ? { targetWordCount: args.wordCount }
+          : {}),
         ...(args.confirm ? { confirmBlogId: args.confirm } : {}),
       });
       console.log(

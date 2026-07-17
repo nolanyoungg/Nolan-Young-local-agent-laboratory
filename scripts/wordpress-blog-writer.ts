@@ -39,6 +39,7 @@ export interface BlogWriterOptions {
   readonly generator?: BlogGenerator;
   readonly model?: string;
   readonly ollamaUrl?: string;
+  readonly targetWordCount?: number;
 }
 export interface BlogWriterResult {
   readonly blogId: string;
@@ -91,9 +92,12 @@ const blog = async (
   suppliedTitle: string,
   model = "qwen2.5-coder:14b",
   ollamaUrl = "http://127.0.0.1:11434",
+  targetWordCount = 1200,
 ): Promise<string> => {
   const subject = topic || suppliedTitle || "your WordPress project";
   const title = suppliedTitle || `A practical guide to ${subject}`;
+  if (!Number.isInteger(targetWordCount) || targetWordCount < 100)
+    throw new Error("Word count must be a whole number of at least 100.");
   const response = await fetch(
     `${ollamaUrl.replace(/\/$/u, "")}/api/generate`,
     {
@@ -102,8 +106,8 @@ const blog = async (
       body: JSON.stringify({
         model,
         stream: false,
-        options: { num_predict: 5000, temperature: 0.55 },
-        prompt: `Write a complete, original, publication-ready Markdown blog article about: ${subject}\n\nAudience: beginners who want practical, trustworthy guidance. Write 1,400–2,000 words. Use 6–9 descriptive H2 sections that are specific to this topic; do not use H3 headings as a substitute for the required H2 outline. Explain the decisions, workflow, common mistakes, and a realistic example where useful. Include accurate technical details appropriate to the topic. If the topic involves WordPress, use current WordPress conventions and official WordPress links where relevant. Do not use filler, placeholders, bracketed research notes, or generic sections that could apply unchanged to an unrelated topic. Do not invent statistics, customer stories, or citations.\n\nReturn only the article body in Markdown. Do not include YAML front matter, a title/H1, preamble, or a word-count note.`,
+        options: { num_predict: 6000, temperature: 0.55 },
+        prompt: `Write a complete, original, publication-ready Markdown blog article about: ${subject}\n\nAudience: beginners who want practical, trustworthy guidance. Write at least ${targetWordCount} words. Explain the decisions, workflow, common mistakes, and a realistic example where useful. Include accurate technical details appropriate to the topic. If the topic involves WordPress, use current WordPress conventions and official WordPress links where relevant. Do not use filler, placeholders, bracketed research notes, or generic sections that could apply unchanged to an unrelated topic. Do not invent statistics, customer stories, or citations.\n\nDo not use placeholder text.\n\nReturn only the article body in Markdown. Do not include YAML front matter or a preamble.`,
       }),
     },
   );
@@ -118,12 +122,13 @@ const blog = async (
     !payload.response.trim()
   )
     throw new Error("Blog generation returned no article content.");
-  const article = payload.response.trim().replace(/^# [^\n]+\n+/u, "");
+  const article = payload.response.trim();
   const wordCount = article.split(/\s+/u).filter(Boolean).length;
-  const h2Count = (article.match(/^## /gmu) ?? []).length;
-  if (wordCount < 1200 || h2Count < 5)
+  const hasPlaceholder =
+    /\b(?:lorem ipsum|placeholder|research needed|todo|tbd)\b/iu.test(article);
+  if (wordCount < targetWordCount || hasPlaceholder)
     throw new Error(
-      "Blog generation did not meet the required length and section detail.",
+      `Blog generation did not meet the requested word count or included placeholder text (${wordCount} words, placeholder text: ${hasPlaceholder}).`,
     );
   return `${frontMatter(title, ["wordpress", slug(subject), "beginners"])}\n# ${title}\n\n${article}\n`;
   /*
