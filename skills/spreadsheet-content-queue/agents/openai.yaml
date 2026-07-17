@@ -1,0 +1,3 @@
+interface: codex
+name: spreadsheet-content-queue
+description: Discovery metadata only; no OpenAI runtime dependency.

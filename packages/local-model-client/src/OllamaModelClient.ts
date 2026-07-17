@@ -41,7 +41,12 @@ export class OllamaModelClient implements LocalModelClient {
         new URL("/api/chat", request.config.baseUrl),
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(process.env.OLLAMA_API_KEY
+              ? { authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+              : {}),
+          },
           body: JSON.stringify({
             model: request.config.model,
             messages: request.messages.map(({ role, content }) => ({
@@ -64,7 +69,7 @@ export class OllamaModelClient implements LocalModelClient {
         if (response.status === 404)
           throw new ModelClientError(
             "MODEL_NOT_INSTALLED",
-            `Ollama does not have model ${request.config.model}. Run: ollama pull ${request.config.model}`,
+            `Ollama does not have configured model ${request.config.model}.`,
           );
         if (response.status >= 400 && response.status < 500)
           throw new ModelClientError(
@@ -120,7 +125,7 @@ export class OllamaModelClient implements LocalModelClient {
         );
       throw new ModelClientError(
         "OLLAMA_UNAVAILABLE",
-        `Could not connect to local Ollama at ${request.config.baseUrl}.`,
+        `Could not connect to Ollama at ${new URL(request.config.baseUrl).origin}.`,
         true,
         error,
       );

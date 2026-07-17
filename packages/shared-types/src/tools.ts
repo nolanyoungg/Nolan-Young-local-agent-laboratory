@@ -6,7 +6,6 @@ const safePathSchema = z
   .min(1)
   .max(4_096)
   .refine((value) => !value.includes("\0"), "Path contains a null byte");
-const dryRunSchema = z.boolean().default(false);
 
 export const listFilesActionSchema = z.strictObject({
   type: z.literal("list_files"),
@@ -44,56 +43,11 @@ export const searchTextActionSchema = z.strictObject({
     .default(true)
     .describe("Whether the literal search must match letter case."),
 });
-export const createFileActionSchema = z.strictObject({
-  type: z.literal("create_file"),
-  path: safePathSchema.describe(
-    "Workspace-relative path for a new file; the action fails if it exists.",
-  ),
-  content: z.string().describe("Complete UTF-8 contents of the new file."),
-  dryRun: dryRunSchema,
-});
-export const writeFileActionSchema = z.strictObject({
-  type: z.literal("write_file"),
-  path: safePathSchema.describe(
-    "Workspace-relative path to create or atomically overwrite.",
-  ),
-  content: z
-    .string()
-    .describe(
-      "Complete replacement UTF-8 contents. Preserve every unrelated line.",
-    ),
-  dryRun: dryRunSchema,
-});
-export const applyPatchActionSchema = z.strictObject({
-  type: z.literal("apply_patch"),
-  path: safePathSchema.describe("Workspace-relative existing file to patch."),
-  patch: z
-    .string()
-    .min(1)
-    .describe(
-      "One exact replacement encoded as <old text>\\n---REPLACE-WITH---\\n<new text>. The marker must occur exactly once and old text must match exactly once in the current file. This is not a unified diff.",
-    ),
-  dryRun: dryRunSchema,
-});
-export const readProcessLogActionSchema = z.strictObject({
-  type: z.literal("read_process_log"),
-  processId: z
-    .string()
-    .min(1)
-    .describe("Exact process identifier supplied by deterministic evidence."),
-  stream: z
-    .enum(["stdout", "stderr", "both"])
-    .default("both")
-    .describe(
-      "Process stream to read. Start with both because build diagnostics may be emitted to stdout or stderr; an empty single stream is inconclusive.",
-    ),
-});
-export const getProcessStatusActionSchema = z.strictObject({
-  type: z.literal("get_process_status"),
-  processId: z
-    .string()
-    .min(1)
-    .describe("Exact process identifier supplied by deterministic evidence."),
+export const phpSyntaxCheckActionSchema = z.strictObject({
+  type: z.literal("php_syntax_check"),
+  path: safePathSchema
+    .regex(/\.php$/iu, "PHP syntax checks accept only .php files")
+    .describe("Exact workspace-relative PHP file to check with php -l."),
 });
 export const finishActionSchema = z.strictObject({
   type: z.literal("finish"),
@@ -105,11 +59,7 @@ export const agentActionSchema = z.discriminatedUnion("type", [
   readFileActionSchema,
   readFileMetadataActionSchema,
   searchTextActionSchema,
-  createFileActionSchema,
-  writeFileActionSchema,
-  applyPatchActionSchema,
-  readProcessLogActionSchema,
-  getProcessStatusActionSchema,
+  phpSyntaxCheckActionSchema,
   finishActionSchema,
 ]);
 export const actionSchema = agentActionSchema;
@@ -141,11 +91,7 @@ export const toolActionJsonSchemas: Readonly<
   read_file: zodToEmbeddedJsonSchema(readFileActionSchema),
   read_file_metadata: zodToEmbeddedJsonSchema(readFileMetadataActionSchema),
   search_text: zodToEmbeddedJsonSchema(searchTextActionSchema),
-  create_file: zodToEmbeddedJsonSchema(createFileActionSchema),
-  write_file: zodToEmbeddedJsonSchema(writeFileActionSchema),
-  apply_patch: zodToEmbeddedJsonSchema(applyPatchActionSchema),
-  read_process_log: zodToEmbeddedJsonSchema(readProcessLogActionSchema),
-  get_process_status: zodToEmbeddedJsonSchema(getProcessStatusActionSchema),
+  php_syntax_check: zodToEmbeddedJsonSchema(phpSyntaxCheckActionSchema),
 };
 
 export const toolResultSchema = z.object({
@@ -167,7 +113,6 @@ export interface ToolResult {
 export interface ToolDefinition {
   readonly name: ToolName;
   readonly description: string;
-  readonly mutating: boolean;
 }
 export interface ToolCall {
   readonly id: string;

@@ -1,12 +1,10 @@
 import type { AgentAction, ToolResult } from "@laboratory/shared-types";
 import type { WorkspaceGuard } from "@laboratory/workspace-security";
-import { ApplyPatchTool } from "./ApplyPatchTool.js";
-import { CreateFileTool } from "./CreateFileTool.js";
 import { ListFilesTool } from "./ListFilesTool.js";
 import { ReadFileMetadataTool } from "./ReadFileMetadataTool.js";
 import { ReadFileTool } from "./ReadFileTool.js";
 import { SearchTextTool } from "./SearchTextTool.js";
-import { WriteFileTool } from "./WriteFileTool.js";
+import { PhpSyntaxCheckTool } from "./PhpSyntaxCheckTool.js";
 export interface FilesystemToolExecutor {
   execute(input: unknown): Promise<ToolResult>;
 }
@@ -22,12 +20,8 @@ export class FilesystemToolFactory {
         return new ReadFileMetadataTool(this.guard);
       case "search_text":
         return new SearchTextTool(this.guard);
-      case "create_file":
-        return new CreateFileTool(this.guard);
-      case "write_file":
-        return new WriteFileTool(this.guard);
-      case "apply_patch":
-        return new ApplyPatchTool(this.guard);
+      case "php_syntax_check":
+        return new PhpSyntaxCheckTool(this.guard);
       default:
         throw new Error(`Not a filesystem tool: ${name}`);
     }

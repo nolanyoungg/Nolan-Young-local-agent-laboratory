@@ -1,0 +1,3 @@
+interface: codex
+name: email-delivery
+description: Discovery metadata only; no OpenAI runtime dependency.

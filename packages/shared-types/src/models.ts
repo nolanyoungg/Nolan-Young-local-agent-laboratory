@@ -14,12 +14,11 @@ export const modelConfigSchema = z.object({
     .refine((value) => {
       const url = new URL(value);
       return (
-        url.protocol === "http:" &&
+        ["http:", "https:"].includes(url.protocol) &&
         url.username === "" &&
-        url.password === "" &&
-        ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
+        url.password === ""
       );
-    }, "Ollama URL must use a loopback host")
+    }, "Ollama URL must be an http(s) URL without embedded credentials")
     .default("http://127.0.0.1:11434"),
   model: z.string().min(1).default("qwen2.5-coder:14b"),
   timeoutMilliseconds: z.number().int().positive().default(180_000),

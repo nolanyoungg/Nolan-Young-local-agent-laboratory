@@ -31,6 +31,7 @@ const summarizeAction = (action: AgentAction): Record<string, unknown> => {
       };
     case "read_file":
     case "read_file_metadata":
+    case "php_syntax_check":
       return { path: action.path };
     case "search_text":
       return {
@@ -38,23 +39,6 @@ const summarizeAction = (action: AgentAction): Record<string, unknown> => {
         query: contentDigest(action.query),
         caseSensitive: action.caseSensitive,
       };
-    case "create_file":
-    case "write_file":
-      return {
-        path: action.path,
-        content: contentDigest(action.content),
-        dryRun: action.dryRun,
-      };
-    case "apply_patch":
-      return {
-        path: action.path,
-        patch: contentDigest(action.patch),
-        dryRun: action.dryRun,
-      };
-    case "read_process_log":
-      return { processId: action.processId, stream: action.stream };
-    case "get_process_status":
-      return { processId: action.processId };
     case "finish":
       return { final: true };
   }

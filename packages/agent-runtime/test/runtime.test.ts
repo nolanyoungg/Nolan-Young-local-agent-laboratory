@@ -103,7 +103,7 @@ describe("AgentRunner", () => {
           JSON.stringify({ type: "write_file", path: "a", content: "x" }),
         ])
       ).run(agent, "task", modelConfigSchema.parse({})),
-    ).rejects.toThrow("cannot use");
+    ).rejects.toThrow("action schema");
   });
 
   it("returns schema-specific retry guidance and accepts a correction", async () => {
@@ -131,62 +131,6 @@ describe("AgentRunner", () => {
     ).resolves.toEqual({ ok: true });
   });
 
-  it("documents mutation semantics and returns failed-tool recovery guidance", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "runtime-"));
-    const registry = new ToolRegistry();
-    let calls = 0;
-    registry.register("apply_patch", {
-      async execute(): Promise<ToolResult> {
-        calls += 1;
-        return calls === 1
-          ? {
-              ok: false,
-              error: {
-                code: "INVALID_PATCH",
-                message: "Patch must contain one exact marker",
-              },
-            }
-          : { ok: true, output: { path: "a", changed: true } };
-      },
-    });
-    const mutator: AgentDefinition = {
-      ...agent,
-      permittedTools: ["apply_patch"],
-    };
-    const model = new MockModelClient([
-      (request) => {
-        const system = request.messages.find(
-          (message) => message.role === "system",
-        )?.content;
-        expect(system).toContain("---REPLACE-WITH---");
-        expect(system).toContain("not a unified diff");
-        return JSON.stringify({
-          type: "apply_patch",
-          path: "a",
-          patch: "bad",
-        });
-      },
-      (request) => {
-        const toolResult = request.messages.at(-1)?.content;
-        expect(toolResult).toContain("did not take effect");
-        expect(toolResult).toContain("INVALID_PATCH");
-        return JSON.stringify({
-          type: "apply_patch",
-          path: "a",
-          patch: "old\n---REPLACE-WITH---\nnew",
-        });
-      },
-      JSON.stringify({ type: "finish", result: { ok: true } }),
-    ]);
-    await expect(
-      new AgentRunner(
-        model,
-        registry,
-        new TraceRecorder("run", path.join(root, "trace.jsonl")),
-      ).run(mutator, "task", modelConfigSchema.parse({})),
-    ).resolves.toEqual({ ok: true });
-    expect(calls).toBe(2);
-  });
   it("returns thrown tool errors to the model for recovery", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "runtime-"));
     const registry = new ToolRegistry();

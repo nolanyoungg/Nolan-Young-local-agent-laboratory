@@ -51,18 +51,10 @@ export const buildStructuredActionProtocol = (
     "- Request one evidence tool at a time. A tool result will be returned before your next action.",
     "- Never invent a tool result. Use finish only when the required result is supported by evidence.",
     "- Every finish.result must match its schema exactly.",
-    ...(toolTypes.includes("apply_patch")
+    ...(toolTypes.includes("php_syntax_check")
       ? [
-          "- apply_patch is an exact replacement, not a unified diff: patch must be <old text>\\n---REPLACE-WITH---\\n<new text>. The old text must match exactly once.",
+          "- php_syntax_check is a bounded non-mutating php -l check for one approved .php file; it may report PHP_UNAVAILABLE.",
         ]
-      : []),
-    ...(toolTypes.includes("write_file")
-      ? [
-          "- write_file.content is the complete replacement file. Never omit unrelated content.",
-        ]
-      : []),
-    ...(toolTypes.includes("create_file")
-      ? ["- create_file fails when the path already exists."]
       : []),
     `Allowed action types: ${actionTypes.join(", ")}`,
     "Exact response JSON Schema:",

@@ -12,6 +12,10 @@ import {
 } from "@laboratory/shared-types";
 import { TraceRecorder } from "@laboratory/tracing";
 import { WorkspaceGuard } from "@laboratory/workspace-security";
+import {
+  verifyWordPressTheme,
+  type ThemeVerification,
+} from "./wordpress-theme.js";
 
 const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
 const readToolSchema = z.enum([
@@ -19,6 +23,7 @@ const readToolSchema = z.enum([
   "read_file",
   "read_file_metadata",
   "search_text",
+  "php_syntax_check",
 ]);
 
 const agentMetadataSchema = z.object({
@@ -43,6 +48,12 @@ const auditFindingSchema = z.strictObject({
   impact: z.string().min(1),
   recommendation: z.string().min(1),
   path: z.string().min(1),
+  confidence: z.enum(["high", "medium", "low"]),
+  classification: z.enum([
+    "confirmed",
+    "inferred",
+    "runtime-verification-needed",
+  ]),
 });
 
 export const auditResultSchema = z.strictObject({
@@ -96,10 +107,18 @@ export interface LibraryAgentRunResult {
   readonly model: string;
   readonly result: AuditResult;
   readonly reportDirectory: string;
+  readonly staticVerification?: ThemeVerification;
 }
 
 const binaryFileExtension =
   /\.(?:avif|bmp|eot|gif|ico|jpe?g|otf|png|ttf|webp|woff2?)$/iu;
+const isWithin = (parent: string, candidate: string): boolean => {
+  const relative = path.relative(parent, candidate);
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
+};
 
 const parseMarkdown = (contents: string, source: string): ParsedMarkdown => {
   const normalized = contents.replaceAll("\r\n", "\n");
@@ -197,17 +216,35 @@ export const loadAgent = async (
 export const listLibraryEntries = async (
   repositoryRoot: string,
 ): Promise<{ agents: string[]; skills: string[] }> => {
-  const directories = async (name: string): Promise<string[]> =>
-    (await readdir(path.join(repositoryRoot, name), { withFileTypes: true }))
-      .filter(
-        (entry) =>
-          entry.isDirectory() && slugSchema.safeParse(entry.name).success,
-      )
+  const directories = async (
+    name: string,
+    definition: string,
+  ): Promise<string[]> => {
+    const entries = await readdir(path.join(repositoryRoot, name), {
+      withFileTypes: true,
+    });
+    const candidates = entries.filter(
+      (entry) =>
+        entry.isDirectory() && slugSchema.safeParse(entry.name).success,
+    );
+    const valid = await Promise.all(
+      candidates.map(async (entry) => ({
+        name: entry.name,
+        valid: await readFile(
+          path.join(repositoryRoot, name, entry.name, definition),
+        )
+          .then(() => true)
+          .catch(() => false),
+      })),
+    );
+    return valid
+      .filter((entry) => entry.valid)
       .map((entry) => entry.name)
       .sort();
+  };
   return {
-    agents: await directories("agents"),
-    skills: await directories("skills"),
+    agents: await directories("agents", "AGENT.md"),
+    skills: await directories("skills", "SKILL.md"),
   };
 };
 
@@ -221,6 +258,9 @@ export const discoverOllamaModels = async (
 ): Promise<readonly OllamaModelEntry[]> => {
   const validated = modelConfigSchema.parse({ baseUrl });
   const response = await fetch(new URL("/api/tags", validated.baseUrl), {
+    ...(process.env.OLLAMA_API_KEY
+      ? { headers: { authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } }
+      : {}),
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok)
@@ -273,17 +313,21 @@ const markdownReport = (
   agent: LoadedAgent,
   model: string,
   result: AuditResult,
+  staticVerification?: ThemeVerification,
 ): string => {
   const findings = result.findings.length
     ? result.findings
         .map(
           (finding, index) =>
-            `## ${index + 1}. [${finding.severity.toUpperCase()}] ${finding.title}\n\n${finding.path ? `Path: \`${finding.path}\`\n\n` : ""}Impact: ${finding.impact}\n\nEvidence:\n${finding.evidence.map((item) => `- ${item}`).join("\n")}\n\nRecommendation: ${finding.recommendation}`,
+            `## ${index + 1}. [${finding.severity.toUpperCase()}] ${finding.title}\n\nPath: \`${finding.path}\`\n\nClassification: ${finding.classification}; confidence: ${finding.confidence}\n\nImpact: ${finding.impact}\n\nEvidence:\n${finding.evidence.map((item) => `- ${item}`).join("\n")}\n\nRecommendation: ${finding.recommendation}`,
         )
         .join("\n\n")
     : "No findings were reported.";
-  return `# ${agent.name} report\n\nModel: \`${model}\`\n\n${result.summary}\n\n${findings}\n\n## Scope reviewed\n\n${result.scopeReviewed.map((item) => `- ${item}`).join("\n") || "- Not reported"}\n\n## Limitations\n\n${result.limitations.map((item) => `- ${item}`).join("\n") || "- None reported"}\n\n## Recommended next steps\n\n${result.recommendedNextSteps.map((item) => `- ${item}`).join("\n") || "- None reported"}\n`;
+  return `# ${agent.name} report\n\nModel: \`${model}\`\n\n${staticVerification ? `${staticThemeMarkdown(staticVerification)}\n` : ""}${result.summary}\n\n${findings}\n\n## Scope reviewed\n\n${result.scopeReviewed.map((item) => `- ${item}`).join("\n") || "- Not reported"}\n\n## Limitations\n\n${result.limitations.map((item) => `- ${item}`).join("\n") || "- None reported"}\n\n## Recommended next steps\n\n${result.recommendedNextSteps.map((item) => `- ${item}`).join("\n") || "- None reported"}\n`;
 };
+
+const staticThemeMarkdown = (verification: ThemeVerification): string =>
+  `# WordPress static theme verification\n\nVerdict: \`${verification.verdict}\`\n\nTheme type: \`${verification.themeType}\`\n\n## Issues\n\n${verification.issues.length ? verification.issues.map((item) => `- **${item.severity}** \`${item.path}\`: ${item.evidence}\n  Impact: ${item.impact}\n  Next: ${item.recommendedNextStep}\n  Confidence: ${item.confidence}; classification: ${item.classification}`).join("\n") : "- No blocking static structural defects found."}\n\n## Limitations\n\n${verification.limitations.map((item) => `- ${item}`).join("\n")}\n`;
 
 export const runLibraryAgent = async (
   options: RunLibraryAgentOptions,
@@ -299,9 +343,16 @@ export const runLibraryAgent = async (
   const skills = await Promise.all(
     skillIds.map((id) => loadSkill(options.repositoryRoot, id)),
   );
-  const baseUrl = options.baseUrl ?? "http://127.0.0.1:11434";
+  const baseUrl =
+    options.baseUrl ?? process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
   const model = await selectModel(baseUrl, options.model);
-  const modelConfig: ModelConfig = modelConfigSchema.parse({ baseUrl, model });
+  const modelConfig: ModelConfig = modelConfigSchema.parse({
+    baseUrl,
+    model,
+    timeoutMilliseconds: Number(
+      process.env.OLLAMA_REQUEST_TIMEOUT_MS ?? 120_000,
+    ),
+  });
   const guard = await WorkspaceGuard.create(options.workspace, {
     read: ["**"],
     write: [],
@@ -372,9 +423,20 @@ export const runLibraryAgent = async (
     .toISOString()
     .replaceAll(":", "-")
     .replaceAll(".", "-");
-  const reportDirectory = path.resolve(
-    options.reportDirectory ??
-      path.join(options.repositoryRoot, "reports", "agent-runs"),
+  const reportsRoot = path.resolve(
+    options.repositoryRoot,
+    "reports",
+    "agent-runs",
+  );
+  const requestedReportsRoot = path.resolve(
+    options.reportDirectory ?? reportsRoot,
+  );
+  if (!isWithin(reportsRoot, requestedReportsRoot))
+    throw new Error(
+      "Agent reports may be written only below reports/agent-runs",
+    );
+  const reportDirectory = path.join(
+    requestedReportsRoot,
     `${timestamp}-${agent.id}-${runId}`,
   );
   await mkdir(reportDirectory, { recursive: true });
@@ -383,6 +445,23 @@ export const runLibraryAgent = async (
     path.join(reportDirectory, "trace.jsonl"),
   );
   await trace.initialize();
+  const staticVerification =
+    agent.id === "wordpress-theme-verification-agent"
+      ? await verifyWordPressTheme(options.workspace)
+      : undefined;
+  if (staticVerification)
+    await Promise.all([
+      writeFile(
+        path.join(reportDirectory, "theme-verification.json"),
+        `${JSON.stringify(staticVerification, null, 2)}\n`,
+        "utf8",
+      ),
+      writeFile(
+        path.join(reportDirectory, "static-report.md"),
+        staticThemeMarkdown(staticVerification),
+        "utf8",
+      ),
+    ]);
   const systemInstructions = [
     agent.instructions,
     `Use the available repository tools methodically. You must directly inspect at least ${agent.minimumEvidenceFiles} distinct files with read_file or read_file_metadata before finishing. Search results do not count toward this minimum.${agent.requiredEvidence.length > 0 ? ` Required evidence categories are: ${agent.requiredEvidence.join(", ")}. A path ending in /** means at least one file beneath that directory; use read_file_metadata for binary assets. Cover one representative file in each directory category first. Do not exhaustively read sibling files merely because they were listed. After the minimum and every required category are covered, perform only evidence-driven follow-up reads and then finish.` : ""} After listing the workspace, prioritize direct reads across representative root files and subdirectories; do not spend the review issuing broad searches without opening files. scopeReviewed must contain exact paths successfully inspected with read_file or read_file_metadata. Every finding must identify one of those inspected paths. Ground every finding in observed evidence and try to disprove it before reporting it. Do not claim to have executed software, measured runtime performance, or inspected files you did not actually inspect.`,
@@ -439,16 +518,28 @@ export const runLibraryAgent = async (
     description: agent.description,
     systemInstructions,
     permittedTools: agent.tools,
-    maximumSteps: options.maximumSteps ?? agent.maximumSteps,
+    maximumSteps: Math.min(
+      options.maximumSteps ?? agent.maximumSteps,
+      Number(process.env.OLLAMA_MAX_TOOL_ROUNDS ?? 12),
+    ),
     outputSchema: runResultSchema,
   };
-  const result = runResultSchema.parse(
-    await new AgentRunner(modelClient, registry, trace).run(
+  let rawResult: unknown;
+  try {
+    rawResult = await new AgentRunner(modelClient, registry, trace).run(
       definition,
       options.task,
       modelConfig,
-    ),
-  );
+    );
+  } catch (error) {
+    await writeFile(
+      path.join(reportDirectory, "model-failure.json"),
+      `${JSON.stringify({ status: "model-or-tool-failure", message: error instanceof Error ? error.message : "Unknown failure" }, null, 2)}\n`,
+      "utf8",
+    );
+    throw error;
+  }
+  const result = runResultSchema.parse(rawResult);
   await writeFile(
     path.join(reportDirectory, "result.json"),
     `${JSON.stringify(result, null, 2)}\n`,
@@ -456,13 +547,20 @@ export const runLibraryAgent = async (
   );
   await writeFile(
     path.join(reportDirectory, "report.md"),
-    markdownReport(agent, model, result),
+    markdownReport(agent, model, result, staticVerification),
     "utf8",
   );
   await writeFile(
     path.join(reportDirectory, "run-metadata.json"),
-    `${JSON.stringify({ runId, agent: agent.id, skills: skillIds, workspace: guard.root, model, baseUrl }, null, 2)}\n`,
+    `${JSON.stringify({ runId, agent: agent.id, skills: skillIds, workspace: guard.root, model, ollamaOrigin: new URL(baseUrl).origin }, null, 2)}\n`,
     "utf8",
   );
-  return { agent, skills, model, result, reportDirectory };
+  return {
+    agent,
+    skills,
+    model,
+    result,
+    reportDirectory,
+    ...(staticVerification ? { staticVerification } : {}),
+  };
 };

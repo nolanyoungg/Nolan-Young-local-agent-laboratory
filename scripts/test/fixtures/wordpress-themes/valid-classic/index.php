@@ -1,0 +1,2 @@
+<?php
+// Classic entry template.

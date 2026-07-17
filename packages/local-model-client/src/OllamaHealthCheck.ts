@@ -5,6 +5,9 @@ export async function checkOllamaHealth(
 ): Promise<ModelHealth> {
   try {
     const response = await fetch(new URL("/api/tags", config.baseUrl), {
+      ...(process.env.OLLAMA_API_KEY
+        ? { headers: { authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } }
+        : {}),
       signal: AbortSignal.timeout(Math.min(config.timeoutMilliseconds, 5_000)),
     });
     if (!response.ok)

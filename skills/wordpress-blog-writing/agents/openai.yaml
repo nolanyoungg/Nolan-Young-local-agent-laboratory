@@ -1,0 +1,3 @@
+interface: codex
+name: wordpress-blog-writing
+description: Discovery metadata only; no OpenAI runtime dependency.

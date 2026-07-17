@@ -31,18 +31,18 @@ describe("local model clients", () => {
   });
 
   it("rejects unsupported providers without hosted fallback", () => {
-    expect(() => createModelClient("openai")).toThrow(
-      "Unsupported local model provider",
-    );
+    expect(() => createModelClient("openai")).toThrow("Ollama only");
+    expect(() => createModelClient("mock")).toThrow("Ollama only");
   });
 
-  it("rejects non-loopback Ollama endpoints", () => {
-    expect(() =>
-      modelConfigSchema.parse({ baseUrl: "https://models.example.com" }),
-    ).toThrow("loopback");
+  it("allows deliberately configured remote Ollama endpoints but rejects embedded credentials", () => {
+    expect(
+      modelConfigSchema.parse({ baseUrl: "https://models.example.com" })
+        .baseUrl,
+    ).toBe("https://models.example.com");
     expect(() =>
       modelConfigSchema.parse({ baseUrl: "http://token@localhost:11434" }),
-    ).toThrow("loopback");
+    ).toThrow("embedded credentials");
   });
 
   it("maps empty and malformed Ollama responses to actionable errors", async () => {

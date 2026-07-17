@@ -24,7 +24,7 @@ export function redact(value: unknown, seen = new WeakSet<object>()): unknown {
           pattern,
           (match, prefix: string | undefined) => `${prefix ?? ""}[REDACTED]`,
         ),
-      value,
+      value.replace(/(https?:\/\/)[^\s/@]+@/giu, "$1[REDACTED]@"),
     );
   return value;
 }

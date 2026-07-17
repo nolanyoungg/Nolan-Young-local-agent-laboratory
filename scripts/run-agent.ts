@@ -17,19 +17,25 @@ interface Arguments {
   help: boolean;
 }
 
-const help = `Local Agent Library\n\nUsage:\n  npm run agent:list\n  npm run agent -- --agent NAME --workspace PATH --task TEXT [options]\n\nOptions:\n  --model NAME              Use a specific installed Ollama model\n  --ollama-url URL          Default: http://127.0.0.1:11434\n  --skill NAME              Load an additional skill; repeatable\n  --max-steps N             Override the agent step budget\n  --report-directory PATH   Override reports/agent-runs\n  --help`;
+const help = `Local Agent Library\n\nUsage:\n  npm run agent:list\n  npm run agent -- AGENT --target PATH [--task TEXT] [options]\n\nOptions:\n  --model NAME              Default: OLLAMA_MODEL or qwen2.5-coder:14b\n  --ollama-url URL          Default: OLLAMA_BASE_URL or http://127.0.0.1:11434\n  --task TEXT               Optional review request\n  --max-steps N             Override the agent step budget\n  --help`;
 
 const parseArguments = (values: readonly string[]): Arguments => {
   const parsed: Arguments = { skills: [], list: false, help: false };
   for (let index = 0; index < values.length; index += 1) {
     const key = values[index];
+    if (key && !key.startsWith("-")) {
+      if (parsed.agent) throw new Error(`Unexpected positional value: ${key}`);
+      parsed.agent = key;
+      continue;
+    }
     if (key === "--help") parsed.help = true;
     else if (key === "--list") parsed.list = true;
     else {
       const value = values[++index];
       if (!value) throw new Error(`Missing value for ${key}`);
       if (key === "--agent") parsed.agent = value;
-      else if (key === "--workspace") parsed.workspace = value;
+      else if (key === "--target" || key === "--workspace")
+        parsed.workspace = value;
       else if (key === "--task") parsed.task = value;
       else if (key === "--model") parsed.model = value;
       else if (key === "--ollama-url") parsed.ollamaUrl = value;
@@ -62,18 +68,23 @@ export const runAgentCli = async (
       );
       return 0;
     }
-    if (!args.agent || !args.task)
+    if (!args.agent || !args.workspace)
       throw new Error(
-        "--agent and --task are required; run with --help for examples",
+        "AGENT and --target are required; run with --help for examples",
       );
     const result = await runLibraryAgent(
       {
         repositoryRoot,
         agentId: args.agent,
         workspace: path.resolve(args.workspace ?? process.cwd()),
-        task: args.task,
-        ...(args.model ? { model: args.model } : {}),
-        ...(args.ollamaUrl ? { baseUrl: args.ollamaUrl } : {}),
+        task:
+          args.task ??
+          "Perform the static, read-only review defined by this agent.",
+        model: args.model ?? process.env.OLLAMA_MODEL ?? "qwen2.5-coder:14b",
+        baseUrl:
+          args.ollamaUrl ??
+          process.env.OLLAMA_BASE_URL ??
+          "http://127.0.0.1:11434",
         ...(args.maxSteps ? { maximumSteps: args.maxSteps } : {}),
         ...(args.reportDirectory
           ? { reportDirectory: path.resolve(args.reportDirectory) }

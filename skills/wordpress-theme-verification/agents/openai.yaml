@@ -1,0 +1,3 @@
+interface: codex
+name: wordpress-theme-verification
+description: Discovery metadata only; this library has no OpenAI runtime dependency.
